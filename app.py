@@ -29,7 +29,7 @@ except Exception as e:
 
 st.subheader("📰 Latest News That May Affect NVIDIA Stock")
 
-API_KEY = "YOUR_NEWSAPI_KEY_HERE"
+API_KEY = "daa8c9fb223c44b2b8e6d38bb56835c7"
 url = "https://newsapi.org/v2/everything"
 params = {
     "q": "NVIDIA",
