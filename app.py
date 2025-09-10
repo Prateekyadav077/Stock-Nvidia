@@ -167,7 +167,8 @@ with left:
     # NEWS & SENTIMENT
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.header("📰 Latest NVIDIA News & Sentiment")
-    API_KEY = "your_api_key_here"  # Replace with your NewsAPI key
+
+    API_KEY = "daa8c9fb223c44b2b8e6d38bb56835c7"  # your NewsAPI key
     url = "https://newsapi.org/v2/everything"
     params = {
         "q": "NVIDIA OR NVDA",
@@ -236,7 +237,7 @@ with right:
             unsafe_allow_html=True
         )
 
-        # Chat history
+        # Show chat history
         st.markdown('<div class="chat-box">', unsafe_allow_html=True)
         for role, msg in st.session_state.chat_history:
             if role == "user":
@@ -245,14 +246,36 @@ with right:
                 st.markdown(f"🤖 **AI:** {msg}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Input box
+        # Input + API call
         user_q = st.text_input("Ask something about stocks, investing, or NVIDIA:")
+
         if st.button("Send"):
             if user_q.strip():
                 st.session_state.chat_history.append(("user", user_q))
-                # Placeholder AI response (replace with OpenAI API call)
-                response = f"(AI response to: {user_q})"
-                st.session_state.chat_history.append(("ai", response))
+
+                try:
+                    from openai import OpenAI
+                    client = OpenAI(api_key=os.getenv(
+                        "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"
+                    ))
+
+                    prompt = (
+                        f"You are a financial assistant AI. Answer the following question in a clear, concise way:\n\n"
+                        f"Question: {user_q}"
+                    )
+
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=250
+                    )
+
+                    answer = response.choices[0].message.content
+                    st.session_state.chat_history.append(("ai", answer))
+
+                except Exception as e:
+                    st.session_state.chat_history.append(("ai", f"Error: {e}"))
+
                 st.experimental_rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
