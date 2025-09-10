@@ -144,7 +144,7 @@ if st.button("Ask AI"):
 
             # Make sure you have set your OpenAI API key in environment variables
             # export OPENAI_API_KEY="your_api_key"
-            client = OpenAI(api_key=os.getenv("sk-...F2IA"))
+            client = OpenAI(api_key=os.getenv("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"))
 
             prompt = (
                 f"You are a financial assistant AI. Answer the following question in a clear, concise way:\n\n"
