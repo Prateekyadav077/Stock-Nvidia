@@ -46,7 +46,7 @@ def build_model(time_steps: int, features: int, units: int = 128, dropout: float
 # Train model
 def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 100, batch_size: int = 32):
     df = load_cleaned_features(ticker, start_date="2018-01-01", end_date="2025-01-01")
-    features = df.columns.tolist()
+    features = df.shape[1]  # Number of features for LSTM input
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(df.values)
 
@@ -57,17 +57,8 @@ def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 100, batch_s
     y_train, y_val, y_test = y[:split1], y[split1:split2], y[split2:]
 
     model = build_model(time_steps, features)
-    es = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-    rlr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5)
-    model.fit(X_train, y_train, validation_data=(X_val, y_val), 
-              epochs=epochs, batch_size=batch_size, callbacks=[es, rlr], verbose=1)
+    ...
 
-    model_path = os.path.join(MODEL_DIR, f"{ticker}_lstm.h5")
-    scaler_path = os.path.join(MODEL_DIR, f"{ticker}_scaler.joblib")
-    model.save(model_path)
-    joblib.dump(scaler, scaler_path)
-    print(f"Saved model to {model_path} and scaler to {scaler_path}")
-    return model_path, scaler_path
 
 # Load saved model
 def load_saved(ticker: str):
