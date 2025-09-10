@@ -119,8 +119,9 @@ if st.button("Predict Future Prices"):
         st.dataframe(out_df)
 
 # ----------------- NEWS + SENTIMENT -----------------
+# ----------------- NEWS + SENTIMENT -----------------
 st.header("📰 Latest NVIDIA News & Sentiment")
-API_KEY = "daa8c9fb223c44b2b8e6d38bb56835c7"  # Replace with your NewsAPI key
+API_KEY = "YOUR_NEWSAPI_KEY_HERE"  # Replace with your NewsAPI key
 url = "https://newsapi.org/v2/everything"
 params = {
     "q": "NVIDIA",
@@ -129,6 +130,9 @@ params = {
     "pageSize": 5,
     "apiKey": API_KEY
 }
+
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+analyzer = SentimentIntensityAnalyzer()
 
 try:
     response = requests.get(url, params=params)
@@ -139,10 +143,12 @@ try:
             description = article.get("description", "")
             url_link = article.get("url", "")
             combined_text = f"{title}. {description}"
-            sentiment = TextBlob(combined_text).sentiment.polarity
-            if sentiment > 0.1:
+
+            # Analyze sentiment using VADER
+            vs = analyzer.polarity_scores(combined_text)
+            if vs['compound'] >= 0.05:
                 sentiment_str = "Positive ✅"
-            elif sentiment < -0.1:
+            elif vs['compound'] <= -0.05:
                 sentiment_str = "Negative ❌"
             else:
                 sentiment_str = "Neutral ⚪"
