@@ -129,8 +129,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--ticker", default="NVDA")
     p.add_argument("--time_steps", type=int, default=60)
-    p.add_argument("--epochs", type=int, default=15)
-    p.add_argument("--future_days", type=int, default=30)
+    p.add_argument("--epochs", type=int, default=30)
+    p.add_argument("--future_days", type=int, default=150)
     args = p.parse_args()
 
     # Train model
