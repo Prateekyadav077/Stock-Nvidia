@@ -22,7 +22,7 @@ st.line_chart(stock_data["Close"])
 
 st.subheader("🤖 Stock Price Prediction (LSTM Model)")
 try:
-    model = load_model("models/NVDA_lstm.h5")
+    model = load_model("NVDA_lstm.h5")
     st.success("✅ Model loaded successfully. Predictions go here...")
 except Exception as e:
     st.warning(f"⚠️ Could not load model: {e}")
