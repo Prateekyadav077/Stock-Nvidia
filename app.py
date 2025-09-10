@@ -79,6 +79,7 @@ if st.button("Show Historical vs Predicted"):
         st.markdown(f"**RMSE:** {rmse:.4f}")
 
 # ----------------- FUTURE PREDICTIONS -----------------
+# ----------------- FUTURE PREDICTIONS -----------------
 st.header("🔮 Future Predictions")
 if st.button("Predict Future Prices"):
     try:
@@ -87,13 +88,16 @@ if st.button("Predict Future Prices"):
         st.error(f"{e}\nRun data_prep_analysis.py and train the model first.")
     else:
         df = pd.read_csv(os.path.join("data", f"{ticker}_cleaned.csv"), index_col=0, parse_dates=True)
-        prices = df["Adj Close"].values.reshape(-1, 1)
-        scaled = scaler.transform(prices)
-        X, y = create_sequences(scaled, time_steps=time_steps)
 
-        last_seq = X[-1]
+        # Use all features for scaling and prediction
+        df_features = df.values  # all columns
+        scaled = scaler.transform(df_features)
+        last_seq = scaled[-time_steps:]  # last sequence, all features
+
+        # Predict future prices
         future_pred = predict_future(model, last_seq, n_steps=int(future_days), scaler=scaler)
 
+        # Generate future dates (business days only)
         last_date = df.index[-1]
         future_dates = []
         current = last_date
@@ -102,6 +106,7 @@ if st.button("Predict Future Prices"):
             if current.weekday() < 5:
                 future_dates.append(current)
 
+        # Plot actual + future predictions
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(df.index, df["Adj Close"], color="lime", label="Actual")
         ax.plot(pd.to_datetime(future_dates), future_pred.flatten(), color="cyan", linestyle='--', label="Future Prediction")
@@ -111,12 +116,15 @@ if st.button("Predict Future Prices"):
         ax.tick_params(axis='x', colors='white')
         ax.tick_params(axis='y', colors='white')
         ax.legend()
+        plt.tight_layout()
         st.pyplot(fig)
 
+        # Show predicted prices in a table
         out_df = pd.DataFrame({"Date": future_dates, "Predicted_Close": future_pred.flatten()})
         out_df["Date"] = pd.to_datetime(out_df["Date"]).dt.date
         st.subheader("Future Predicted Prices")
         st.dataframe(out_df)
+
 
 # ----------------- NEWS + SENTIMENT -----------------
 # ----------------- NEWS + SENTIMENT -----------------
