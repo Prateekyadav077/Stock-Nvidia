@@ -124,6 +124,44 @@ if st.button("Predict Future Prices"):
         out_df["Date"] = pd.to_datetime(out_df["Date"]).dt.date
         st.subheader("Future Predicted Prices")
         st.dataframe(out_df)
+# ----------------- AI FINANCIAL ASSISTANT -----------------
+st.header("🤖 Financial Info Assistant")
+
+st.markdown(
+    "Ask the AI about NVIDIA, stock market trends, investing tips, or financial concepts. "
+    "The AI provides insights based on historical data and general financial knowledge."
+)
+
+user_question = st.text_input("Type your financial question here:")
+
+if st.button("Ask AI"):
+    if user_question.strip() == "":
+        st.warning("Please enter a question first!")
+    else:
+        try:
+            from openai import OpenAI
+            import os
+
+            # Make sure you have set your OpenAI API key in environment variables
+            # export OPENAI_API_KEY="your_api_key"
+            client = OpenAI(api_key=os.getenv("sk-...F2IA"))
+
+            prompt = (
+                f"You are a financial assistant AI. Answer the following question in a clear, concise way:\n\n"
+                f"Question: {user_question}"
+            )
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=250
+            )
+
+            answer = response.choices[0].message.content
+            st.markdown(f"**AI Answer:** {answer}")
+
+        except Exception as e:
+            st.error(f"Error contacting AI: {e}")
 
 
 # ----------------- NEWS + SENTIMENT -----------------
