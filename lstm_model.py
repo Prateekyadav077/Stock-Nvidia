@@ -15,7 +15,7 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-def load_cleaned(ticker: str, data_dir: str = "data") -> pd.DataFrame:
+def load_cleaned(ticker: str, start_date: str = None, end_date: str = None, data_dir: str = "data") -> pd.DataFrame:
     path = os.path.join(data_dir, f"{ticker}_cleaned.csv")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Cleaned data not found at {path}. Run data_prep_analysis.py first.")
@@ -23,6 +23,11 @@ def load_cleaned(ticker: str, data_dir: str = "data") -> pd.DataFrame:
     df = pd.read_csv(path, index_col=0, parse_dates=True)
     df['Adj Close'] = pd.to_numeric(df['Adj Close'], errors='coerce')
     df = df.dropna(subset=['Adj Close'])
+    
+    if start_date:
+        df = df[df.index >= pd.to_datetime(start_date)]
+    if end_date:
+        df = df[df.index <= pd.to_datetime(end_date)]
     
     return df
 
@@ -44,7 +49,9 @@ def build_model(time_steps: int = 60, units: int = 50, dropout: float = 0.2):
     return model
 
 def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 30, batch_size: int = 32):
-    df = load_cleaned(ticker)
+    # Load only historical training data
+    df = load_cleaned(ticker, start_date="2018-01-01", end_date="2025-01-01")
+    
     prices = df[['Adj Close']].values
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled = scaler.fit_transform(prices)
@@ -63,6 +70,7 @@ def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 30, batch_si
     joblib.dump(scaler, scaler_path)
     print(f"Saved model to {model_path} and scaler to {scaler_path}")
     return model_path, scaler_path
+
 
 def load_saved(ticker: str):
     model_path = os.path.join(MODEL_DIR, f"{ticker}_lstm.h5")
