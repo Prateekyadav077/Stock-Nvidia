@@ -1,9 +1,3 @@
-"""
-lstm_model.py
-
-Loads cleaned CSV (produced by data_prep_analysis.py), prepares sequences, trains an LSTM,
-saves the trained model + scaler, and provides test set predictions for visualization.
-"""
 import os
 import numpy as np
 import pandas as pd
@@ -11,36 +5,37 @@ from sklearn.preprocessing import MinMaxScaler
 import joblib
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-def load_cleaned(ticker: str, start_date: str = None, end_date: str = None, data_dir: str = "data") -> pd.DataFrame:
+# Load cleaned data with features
+def load_cleaned_features(ticker: str, start_date: str = None, end_date: str = None, data_dir: str = "data") -> pd.DataFrame:
     path = os.path.join(data_dir, f"{ticker}_cleaned.csv")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Cleaned data not found at {path}. Run data_prep_analysis.py first.")
     
     df = pd.read_csv(path, index_col=0, parse_dates=True)
-    df['Adj Close'] = pd.to_numeric(df['Adj Close'], errors='coerce')
-    df = df.dropna(subset=['Adj Close'])
-    
+    df = df.dropna()
     if start_date:
         df = df[df.index >= pd.to_datetime(start_date)]
     if end_date:
         df = df[df.index <= pd.to_datetime(end_date)]
-    
     return df
 
+# Create multi-feature sequences
 def create_sequences(values: np.ndarray, time_steps: int = 60):
     X, y = [], []
     for i in range(len(values) - time_steps):
         X.append(values[i:i+time_steps])
-        y.append(values[i+time_steps])
+        y.append(values[i+time_steps, 0])  # predict 'Adj Close' only
     return np.array(X), np.array(y)
 
-def build_model(time_steps: int = 60, units: int = 50, dropout: float = 0.2):
+# Build improved LSTM
+def build_model(time_steps: int, features: int, units: int = 128, dropout: float = 0.2):
     model = Sequential()
-    model.add(LSTM(units=units, return_sequences=True, input_shape=(time_steps, 1)))
+    model.add(LSTM(units=units, return_sequences=True, input_shape=(time_steps, features)))
     model.add(Dropout(dropout))
     model.add(LSTM(units=units, return_sequences=False))
     model.add(Dropout(dropout))
@@ -48,21 +43,24 @@ def build_model(time_steps: int = 60, units: int = 50, dropout: float = 0.2):
     model.compile(optimizer="adam", loss="mse")
     return model
 
-def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 30, batch_size: int = 32):
-    # Load only historical training data
-    df = load_cleaned(ticker, start_date="2018-01-01", end_date="2025-01-01")
-    
-    prices = df[['Adj Close']].values
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled = scaler.fit_transform(prices)
+# Train model
+def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 100, batch_size: int = 32):
+    df = load_cleaned_features(ticker, start_date="2018-01-01", end_date="2025-01-01")
+    features = df.columns.tolist()
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(df.values)
 
-    X, y = create_sequences(scaled, time_steps=time_steps)
-    split = int(0.8 * len(X))
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    X, y = create_sequences(scaled, time_steps)
+    split1 = int(len(X)*0.7)
+    split2 = int(len(X)*0.9)
+    X_train, X_val, X_test = X[:split1], X[split1:split2], X[split2:]
+    y_train, y_val, y_test = y[:split1], y[split1:split2], y[split2:]
 
-    model = build_model(time_steps=time_steps)
-    model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, validation_split=0.1, verbose=1)
+    model = build_model(time_steps, features)
+    es = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    rlr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5)
+    model.fit(X_train, y_train, validation_data=(X_val, y_val), 
+              epochs=epochs, batch_size=batch_size, callbacks=[es, rlr], verbose=1)
 
     model_path = os.path.join(MODEL_DIR, f"{ticker}_lstm.h5")
     scaler_path = os.path.join(MODEL_DIR, f"{ticker}_scaler.joblib")
@@ -71,16 +69,17 @@ def train_and_save(ticker: str, time_steps: int = 60, epochs: int = 30, batch_si
     print(f"Saved model to {model_path} and scaler to {scaler_path}")
     return model_path, scaler_path
 
-
+# Load saved model
 def load_saved(ticker: str):
     model_path = os.path.join(MODEL_DIR, f"{ticker}_lstm.h5")
     scaler_path = os.path.join(MODEL_DIR, f"{ticker}_scaler.joblib")
     if not os.path.exists(model_path) or not os.path.exists(scaler_path):
-        raise FileNotFoundError("Model or scaler not found. Train first using train_and_save().")
+        raise FileNotFoundError("Model or scaler not found. Train first.")
     model = load_model(model_path, compile=False)
     scaler = joblib.load(scaler_path)
     return model, scaler
 
+# Multi-step future prediction
 def predict_future(model, last_sequence: np.ndarray, n_steps: int, scaler) -> np.ndarray:
     seq = last_sequence.copy()
     preds = []
@@ -88,41 +87,43 @@ def predict_future(model, last_sequence: np.ndarray, n_steps: int, scaler) -> np
         p = model.predict(seq.reshape(1, *seq.shape), verbose=0)
         preds.append(p[0,0])
         seq = np.roll(seq, -1)
-        seq[-1] = p
+        seq[-1, 0] = p  # only update 'Adj Close'
     preds = np.array(preds).reshape(-1,1)
-    return scaler.inverse_transform(preds)
+    # Scale back
+    dummy = np.zeros((preds.shape[0], scaler.scale_.shape[0]))
+    dummy[:,0] = preds[:,0]
+    inv = scaler.inverse_transform(dummy)[:,0].reshape(-1,1)
+    return inv
 
+# Get test set predictions
 def get_test_predictions(ticker: str, time_steps: int = 60):
     model, scaler = load_saved(ticker)
-    df = load_cleaned(ticker)
-    prices = df[['Adj Close']].values
-    scaled = scaler.transform(prices)
-    X, y = create_sequences(scaled, time_steps=time_steps)
-    
+    df = load_cleaned_features(ticker)
+    scaled = scaler.transform(df.values)
+    X, y = create_sequences(scaled, time_steps)
     preds_scaled = model.predict(X)
-    preds = scaler.inverse_transform(preds_scaled)
-    actual = df['Adj Close'].values[time_steps:].reshape(-1,1)
+    dummy = np.zeros((preds_scaled.shape[0], scaled.shape[1]))
+    dummy[:,0] = preds_scaled[:,0]
+    preds = scaler.inverse_transform(dummy)[:,0]
+    actual = df['Adj Close'].values[time_steps:]
     dates = df.index[time_steps:]
-    return dates, actual.flatten(), preds.flatten()
+    return dates, actual, preds
 
+# Command-line interface
 if __name__ == "__main__":
-  if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--ticker", default="NVDA")
     p.add_argument("--time_steps", type=int, default=60)
-    p.add_argument("--epochs", type=int, default=15)
-    p.add_argument("--future_days", type=int, default=30, help="Days to predict after 2025-01-01")
+    p.add_argument("--epochs", type=int, default=50)
+    p.add_argument("--future_days", type=int, default=30)
     args = p.parse_args()
 
-    # Train model on historical data
     train_and_save(args.ticker, time_steps=args.time_steps, epochs=args.epochs)
 
-    # Predict future after 2025-01-01
     model, scaler = load_saved(args.ticker)
-    df_future = load_cleaned(args.ticker, start_date="2018-01-01", end_date="2025-01-01")
-    last_seq = scaler.transform(df_future[['Adj Close']].values)[-args.time_steps:]
+    df_future = load_cleaned_features(args.ticker, start_date="2018-01-01", end_date="2025-01-01")
+    last_seq = scaler.transform(df_future.values)[-args.time_steps:]
     future_preds = predict_future(model, last_seq, n_steps=args.future_days, scaler=scaler)
 
     print("Future predictions after 2025-01-01:", future_preds.flatten())
-
