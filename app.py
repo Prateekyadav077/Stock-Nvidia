@@ -164,47 +164,7 @@ with left:
             st.dataframe(out_df)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # NEWS & SENTIMENT
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("📰 Latest NVIDIA News & Sentiment")
-
-    API_KEY = "daa8c9fb223c44b2b8e6d38bb56835c7"  # your NewsAPI key
-    url = "https://newsapi.org/v2/everything"
-    params = {
-        "q": "NVIDIA OR NVDA",
-        "sortBy": "publishedAt",
-        "language": "en",
-        "pageSize": 5,
-        "apiKey": API_KEY
-    }
-
-    analyzer = SentimentIntensityAnalyzer()
-
-    try:
-        response = requests.get(url, params=params)
-        news_data = response.json()
-        if "articles" in news_data and len(news_data["articles"]) > 0:
-            for article in news_data["articles"]:
-                title = article.get("title", "")
-                description = article.get("description", "")
-                url_link = article.get("url", "")
-                combined_text = f"{title}. {description}"
-                vs = analyzer.polarity_scores(combined_text)
-                if vs['compound'] >= 0.05:
-                    sentiment_str = "Positive ✅"
-                elif vs['compound'] <= -0.05:
-                    sentiment_str = "Negative ❌"
-                else:
-                    sentiment_str = "Neutral ⚪"
-                st.markdown(f"### {title} ({sentiment_str})")
-                st.write(description)
-                st.markdown(f"[Read more]({url_link})")
-                st.markdown("---")
-        else:
-            st.info("No recent NVIDIA news found.")
-    except Exception as e:
-        st.error(f"Error fetching news: {e}")
-    st.markdown('</div>', unsafe_allow_html=True)
+  
 
 # ----------------- RIGHT SIDE CONTENT: AI ASSISTANT -----------------
 with right:
