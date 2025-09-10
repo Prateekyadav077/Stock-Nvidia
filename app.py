@@ -92,7 +92,7 @@ st.sidebar.success(f"📈 Tracking Ticker: **{ticker}**")
 # ----------------- SIDEBAR CONTROLS -----------------
 st.sidebar.header("⚙️ Settings")
 time_steps = st.sidebar.number_input("Time steps (sequence length)", min_value=10, max_value=200, value=60)
-future_days = st.sidebar.number_input("Days to predict (business days)", min_value=1, max_value=90, value=30)
+future_days = st.sidebar.number_input("Days to predict (business days)", min_value=1, max_value=150, value=100)
 
 # ----------------- LAYOUT: LEFT (Stocks/News) + RIGHT (AI Assistant) -----------------
 left, right = st.columns([3, 1], gap="large")
