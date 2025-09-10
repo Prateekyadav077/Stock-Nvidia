@@ -1,38 +1,53 @@
+# app.py
 import streamlit as st
-import yfinance as yf
-import requests
 import pandas as pd
+import numpy as np
 import datetime
-from keras.models import load_model
+import requests
+from sklearn.preprocessing import MinMaxScaler
 from textblob import TextBlob
+import matplotlib.pyplot as plt
+from lstm_model import train_model, create_sequences, build_model
 
-st.title("📈 NVIDIA Stock Predictor + News Sentiment Tracker")
+st.title("📈 NVIDIA Stock Predictor + News Sentiment")
 
+# Sidebar
 ticker = "NVDA"
-st.sidebar.write("Predicting stock for:", ticker)
+st.sidebar.write("Stock:", ticker)
 
-start = datetime.date(2015, 1, 1)
-end = datetime.date.today()
+# Load cleaned data
+data = pd.read_csv(f"data/{ticker}_cleaned.csv", index_col=0, parse_dates=True)
+st.subheader("📊 Historical Stock Data")
+st.line_chart(data["Adj Close"])
 
-stock_data = yf.download(ticker, start=start, end=end)
+# LSTM Predictions
+st.subheader("🤖 Stock Price Prediction (LSTM)")
+model, scaler = train_model(ticker, epochs=5)  # quick demo training
 
-st.subheader("📊 NVIDIA Stock Data")
-st.write(stock_data.tail())
-st.line_chart(stock_data["Close"])
+# Prepare data
+close = data["Adj Close"].values.reshape(-1,1)
+scaled = scaler.transform(close)
+time_steps = 60
+X, y = create_sequences(scaled, time_steps)
+X = X.reshape((X.shape[0], X.shape[1],1))
 
-st.subheader("🤖 Stock Price Prediction (LSTM Model)")
-try:
-    model = load_model("NVDA_lstm.h5")
-    st.success("✅ Model loaded successfully. Predictions go here...")
-except Exception as e:
-    st.warning(f"⚠️ Could not load model: {e}")
+preds = model.predict(X)
+preds = scaler.inverse_transform(preds)
 
-st.subheader("📰 Latest News That May Affect NVIDIA Stock")
+# Plot
+fig, ax = plt.subplots()
+ax.plot(data.index[time_steps:], close[time_steps:], label="Actual")
+ax.plot(data.index[time_steps:], preds, label="Predicted")
+ax.legend()
+st.pyplot(fig)
 
+# News + Sentiment
+st.subheader("📰 Latest News")
 API_KEY = "daa8c9fb223c44b2b8e6d38bb56835c7"
-url = "https://newsapi.org/v2/everything"
+query = "NVIDIA OR NVDA AND stock OR market"
+
 params = {
-    "q": "NVIDIA",
+    "q": query,
     "sortBy": "publishedAt",
     "language": "en",
     "pageSize": 5,
@@ -40,27 +55,17 @@ params = {
 }
 
 try:
-    response = requests.get(url, params=params)
-    news_data = response.json()
-    if "articles" in news_data and len(news_data["articles"]) > 0:
-        for article in news_data["articles"]:
-            title = article['title']
-            description = article['description'] if article['description'] else ""
-            analysis = TextBlob(title + " " + description)
-            polarity = analysis.sentiment.polarity
-            if polarity > 0.05:
-                sentiment = "🟢 Positive"
-            elif polarity < -0.05:
-                sentiment = "🔴 Negative"
-            else:
-                sentiment = "⚪ Neutral"
-            st.markdown(f"**{title}**")
-            st.write(description)
-            st.caption(f"Sentiment: {sentiment}")
+    response = requests.get("https://newsapi.org/v2/everything", params=params)
+    news = response.json()
+    if "articles" in news:
+        for article in news["articles"]:
+            title = article["title"]
+            desc = article["description"] or ""
+            polarity = TextBlob(title + " " + desc).sentiment.polarity
+            sentiment = "🟢 Positive" if polarity>0 else "🔴 Negative" if polarity<0 else "🟡 Neutral"
+            st.markdown(f"**{title}** ({sentiment})")
+            st.write(desc)
             st.write(f"[Read more]({article['url']})")
-            st.caption(f"Published at: {article['publishedAt']}")
             st.write("---")
-    else:
-        st.info("No recent news found about NVIDIA.")
 except Exception as e:
     st.error(f"Error fetching news: {e}")
