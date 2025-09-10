@@ -124,7 +124,7 @@ st.header("📰 Latest NVIDIA News & Sentiment")
 API_KEY = "daa8c9fb223c44b2b8e6d38bb56835c7"  # Replace with your NewsAPI key
 url = "https://newsapi.org/v2/everything"
 params = {
-    "q": "NVIDIA OR NVDA OR GPU",
+    "q": "NVIDIA OR NVDA",
     "sortBy": "publishedAt",
     "language": "en",
     "pageSize": 5,
