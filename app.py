@@ -1,29 +1,27 @@
 """
-Streamlit app for NVIDIA Stock Predictor + News Sentiment + AI Assistant
+Streamlit app for NVIDIA Stock Predictor (Interactive with Plotly)
 """
 
 import streamlit as st
-from datetime import date
 import pandas as pd
-import matplotlib.pyplot as plt
 import os
-import requests
 from lstm_model import create_sequences, predict_future, load_saved, get_test_predictions
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import plotly.graph_objects as go
 
 # ----------------- PAGE CONFIG -----------------
 st.set_page_config(
     page_title="NVIDIA Stock Predictor",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded",
     page_icon="🟢"
 )
 
-# ----------------- STYLE -----------------
+# ----------------- THEME COLORS -----------------
 primary_color = "#76B900"  # NVIDIA green
-secondary_color = "#1D1D1B"  # Dark background
-card_bg = "#2A2A2A"
+secondary_color = "#121212"  # Dark background
+card_bg = "#1E1E1E"
 
+# ----------------- GLOBAL STYLING -----------------
 st.markdown(
     f"""
     <style>
@@ -34,53 +32,47 @@ st.markdown(
     }}
     h1, h2, h3 {{
         color: {primary_color};
-        font-weight: bold;
+        font-weight: 600;
+        text-align: center;
     }}
     .card {{
         background-color: {card_bg};
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0px 0px 10px rgba(0,0,0,0.4);
-        margin-bottom: 20px;
+        padding: 25px;
+        border-radius: 18px;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.6);
+        margin: 20px auto;
+        max-width: 95%;
     }}
     .stButton>button {{
         background-color: {primary_color};
-        color: white;
-        border-radius: 10px;
+        color: black;
         font-weight: bold;
+        border-radius: 12px;
         transition: 0.3s;
+        border: none;
+        padding: 8px 16px;
     }}
     .stButton>button:hover {{
         background-color: #8CD600;
-        color: black;
-    }}
-    .stNumberInput>div>input {{
-        background-color: #2B2B2B;
         color: white;
-        border-radius: 8px;
-        border: 1px solid #444;
     }}
-    .logo {{
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 15px;
-    }}
-    .logo img {{
-        height: 60px;
-        margin-right: 10px;
+    footer {{
+        text-align: center;
+        color: #aaa;
+        font-size: 12px;
+        margin-top: 30px;
     }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ----------------- APP HEADER -----------------
+# ----------------- HEADER -----------------
 st.markdown(
     """
-    <div class="logo">
-        <img src="https://upload.wikimedia.org/wikipedia/sco/2/21/Nvidia_logo.svg">
-        <h1>NVIDIA Stock Predictor + News Tracker</h1>
+    <div class="logo" style="display:flex;justify-content:center;align-items:center;">
+        <img src="https://upload.wikimedia.org/wikipedia/sco/2/21/Nvidia_logo.svg" height="70" style="margin-right:12px;">
+        <h1>NVIDIA Stock Predictor</h1>
     </div>
     """,
     unsafe_allow_html=True
@@ -89,157 +81,98 @@ st.markdown(
 ticker = "NVDA"
 st.sidebar.success(f"📈 Tracking Ticker: **{ticker}**")
 
-# ----------------- SIDEBAR CONTROLS -----------------
+# ----------------- SIDEBAR -----------------
 st.sidebar.header("⚙️ Settings")
 time_steps = st.sidebar.number_input("Time steps (sequence length)", min_value=10, max_value=200, value=60)
 future_days = st.sidebar.number_input("Days to predict (business days)", min_value=1, max_value=150, value=100)
 
-# ----------------- LAYOUT: LEFT (Stocks/News) + RIGHT (AI Assistant) -----------------
-left, right = st.columns([3, 1], gap="large")
+# ----------------- HISTORICAL PREDICTIONS -----------------
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.subheader("📊 Historical Predictions")
 
-# ----------------- LEFT SIDE CONTENT -----------------
-with left:
-    # HISTORICAL PREDICTION
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("📊 Historical Predictions")
-    if st.button("Show Historical vs Predicted"):
-        try:
-            dates, actual, predicted = get_test_predictions(ticker, time_steps=time_steps)
-        except FileNotFoundError as e:
-            st.error(f"{e}\nRun data_prep_analysis.py and train the model first.")
-        else:
-            fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(dates, actual, color="lime", label="Actual")
-            ax.plot(dates, predicted, color="cyan", linestyle="--", label="Predicted")
-            ax.set_title(f"{ticker} — Historical vs Predicted Prices", color="white")
-            ax.set_xlabel("Date", color="white")
-            ax.set_ylabel("Adjusted Close Price", color="white")
-            ax.tick_params(axis='x', colors='white')
-            ax.tick_params(axis='y', colors='white')
-            ax.legend()
-            st.pyplot(fig)
+if st.button("Show Historical vs Predicted"):
+    try:
+        dates, actual, predicted = get_test_predictions(ticker, time_steps=time_steps)
+    except FileNotFoundError as e:
+        st.error(f"{e}\n⚠️ Please run data_prep_analysis.py and train the model first.")
+    else:
+        fig = go.Figure()
 
-            mse = ((actual - predicted) ** 2).mean()
-            rmse = mse ** 0.5
-            st.success(f"📉 **RMSE:** {rmse:.4f}")
-    st.markdown('</div>', unsafe_allow_html=True)
+        fig.add_trace(go.Scatter(x=dates, y=actual, mode='lines', name="Actual Price",
+                                 line=dict(color=primary_color, width=2)))
+        fig.add_trace(go.Scatter(x=dates, y=predicted, mode='lines', name="Predicted Price",
+                                 line=dict(color="cyan", dash="dash", width=2)))
 
-    # FUTURE PREDICTION
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.header("🔮 Future Predictions")
-    if st.button("Predict Future Prices"):
-        try:
-            model, scaler = load_saved(ticker)
-        except FileNotFoundError as e:
-            st.error(f"{e}\nRun data_prep_analysis.py and train the model first.")
-        else:
-            df = pd.read_csv(os.path.join("data", f"{ticker}_cleaned.csv"), index_col=0, parse_dates=True)
-            scaled = scaler.transform(df.values)
-            last_seq = scaled[-time_steps:]
-            future_pred = predict_future(model, last_seq, n_steps=int(future_days), scaler=scaler)
-
-            last_date = df.index[-1]
-            future_dates = []
-            current = last_date
-            while len(future_dates) < int(future_days):
-                current += pd.Timedelta(days=1)
-                if current.weekday() < 5:
-                    future_dates.append(current)
-
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(df.index, df["Adj Close"], color="lime", label="Actual")
-            ax.plot(pd.to_datetime(future_dates), future_pred.flatten(), color="cyan", linestyle='--', label="Future Prediction")
-            ax.set_title(f"{ticker} — Actual vs Future Prediction", color="white")
-            ax.set_xlabel("Date", color="white")
-            ax.set_ylabel("Adjusted Close Price", color="white")
-            ax.tick_params(axis='x', colors='white')
-            ax.tick_params(axis='y', colors='white')
-            ax.legend()
-            plt.tight_layout()
-            st.pyplot(fig)
-
-            out_df = pd.DataFrame({"Date": future_dates, "Predicted_Close": future_pred.flatten()})
-            out_df["Date"] = pd.to_datetime(out_df["Date"]).dt.date
-            st.subheader("📅 Future Predicted Prices")
-            st.dataframe(out_df)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-  
-
-# ----------------- RIGHT SIDE CONTENT: AI ASSISTANT -----------------
-with right:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("🤖 AI Assistant")
-
-    if "ai_open" not in st.session_state:
-        st.session_state.ai_open = False
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    if st.button("💬 Open AI Chat" if not st.session_state.ai_open else "❌ Close AI Chat"):
-        st.session_state.ai_open = not st.session_state.ai_open
-
-    if st.session_state.ai_open:
-        st.markdown(
-            """
-            <style>
-            .chat-box {
-                background-color: #2B2B2B;
-                border-radius: 12px;
-                padding: 12px;
-                height: 400px;
-                overflow-y: auto;
-                border: 1px solid #444;
-                margin-bottom: 10px;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
+        fig.update_layout(
+            title=f"{ticker} — Historical vs Predicted Stock Prices",
+            template="plotly_dark",
+            paper_bgcolor=secondary_color,
+            plot_bgcolor="#181818",
+            font=dict(color="white"),
+            xaxis=dict(title="Date", showgrid=False),
+            yaxis=dict(title="Adjusted Close Price (USD)", showgrid=False),
+            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=primary_color)
         )
 
-        # Show chat history
-        st.markdown('<div class="chat-box">', unsafe_allow_html=True)
-        for role, msg in st.session_state.chat_history:
-            if role == "user":
-                st.markdown(f"🧑 **You:** {msg}")
-            else:
-                st.markdown(f"🤖 **AI:** {msg}")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-        # Input + API call
-        user_q = st.text_input("Ask something about stocks, investing, or NVIDIA:")
+        mse = ((actual - predicted) ** 2).mean()
+        rmse = mse ** 0.5
+        st.success(f"📉 Root Mean Square Error (RMSE): **{rmse:.4f}**")
+st.markdown('</div>', unsafe_allow_html=True)
 
-        if st.button("Send"):
-            if user_q.strip():
-                st.session_state.chat_history.append(("user", user_q))
+# ----------------- FUTURE PREDICTIONS -----------------
+st.markdown('<div class="card">', unsafe_allow_html=True)
+st.subheader("🔮 Future Predictions")
 
-                try:
-                    from openai import OpenAI
-                    client = OpenAI(api_key=os.getenv(
-                        "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"
-                    ))
+if st.button("Predict Future Prices"):
+    try:
+        model, scaler = load_saved(ticker)
+    except FileNotFoundError as e:
+        st.error(f"{e}\n⚠️ Please run data_prep_analysis.py and train the model first.")
+    else:
+        df = pd.read_csv(os.path.join("data", f"{ticker}_cleaned.csv"), index_col=0, parse_dates=True)
+        scaled = scaler.transform(df.values)
+        last_seq = scaled[-time_steps:]
+        future_pred = predict_future(model, last_seq, n_steps=int(future_days), scaler=scaler)
 
-                    prompt = (
-                        f"You are a financial assistant AI. Answer the following question in a clear, concise way:\n\n"
-                        f"Question: {user_q}"
-                    )
+        last_date = df.index[-1]
+        future_dates = []
+        current = last_date
+        while len(future_dates) < int(future_days):
+            current += pd.Timedelta(days=1)
+            if current.weekday() < 5:  # skip weekends
+                future_dates.append(current)
 
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=250
-                    )
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df.index, y=df["Adj Close"], mode='lines',
+                                 name="Historical Price", line=dict(color=primary_color, width=2)))
+        fig.add_trace(go.Scatter(x=pd.to_datetime(future_dates), y=future_pred.flatten(),
+                                 mode='lines', name="Future Prediction",
+                                 line=dict(color="cyan", dash="dash", width=2)))
 
-                    answer = response.choices[0].message.content
-                    st.session_state.chat_history.append(("ai", answer))
+        fig.update_layout(
+            title=f"{ticker} — Actual vs Future Prediction",
+            template="plotly_dark",
+            paper_bgcolor=secondary_color,
+            plot_bgcolor="#181818",
+            font=dict(color="white"),
+            xaxis=dict(title="Date", showgrid=False),
+            yaxis=dict(title="Adjusted Close Price (USD)", showgrid=False),
+            legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=primary_color)
+        )
 
-                except Exception as e:
-                    st.session_state.chat_history.append(("ai", f"Error: {e}"))
+        st.plotly_chart(fig, use_container_width=True)
 
-                st.experimental_rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
+        out_df = pd.DataFrame({"Date": future_dates, "Predicted_Close": future_pred.flatten()})
+        out_df["Date"] = pd.to_datetime(out_df["Date"]).dt.date
+        st.subheader("📅 Predicted Prices (Table)")
+        st.dataframe(out_df, use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------------- FOOTER -----------------
 st.markdown("---")
-st.caption("⚠️ Predictions are experimental. Do not use as financial advice.")
+st.markdown(
+    "<footer>⚠️ Predictions are experimental and should not be considered financial advice.</footer>",
+    unsafe_allow_html=True
+)
