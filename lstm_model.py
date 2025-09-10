@@ -106,10 +106,23 @@ def get_test_predictions(ticker: str, time_steps: int = 60):
     return dates, actual.flatten(), preds.flatten()
 
 if __name__ == "__main__":
+  if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--ticker", default="NVDA")
     p.add_argument("--time_steps", type=int, default=60)
     p.add_argument("--epochs", type=int, default=15)
+    p.add_argument("--future_days", type=int, default=30, help="Days to predict after 2025-01-01")
     args = p.parse_args()
+
+    # Train model on historical data
     train_and_save(args.ticker, time_steps=args.time_steps, epochs=args.epochs)
+
+    # Predict future after 2025-01-01
+    model, scaler = load_saved(args.ticker)
+    df_future = load_cleaned(args.ticker, start_date="2018-01-01", end_date="2025-01-01")
+    last_seq = scaler.transform(df_future[['Adj Close']].values)[-args.time_steps:]
+    future_preds = predict_future(model, last_seq, n_steps=args.future_days, scaler=scaler)
+
+    print("Future predictions after 2025-01-01:", future_preds.flatten())
+
